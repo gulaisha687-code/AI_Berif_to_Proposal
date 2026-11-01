@@ -1,0 +1,5 @@
+package com.example.brief_to_proposal
+
+import io.flutter.embedding.android.FlutterActivity
+
+class MainActivity : FlutterActivity()
