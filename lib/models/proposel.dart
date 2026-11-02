@@ -1,7 +1,8 @@
 class TaskItem {
   final String name;
   final String description;
-  final double hours;
+   double hours;
+
 
   TaskItem({
     required this.name,
@@ -23,7 +24,7 @@ class TaskItem {
 
 class Milestone {
   final String name;
-  final int week;
+   int week;
 
   Milestone({required this.name, required this.week});
   Map<String, dynamic> toJson() => {

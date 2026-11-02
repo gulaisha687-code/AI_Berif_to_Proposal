@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/save_pro.dart';
+import '../models/proposel.dart';
 
 class StorageService {
   static const _key = 'saved_proposals';
@@ -29,6 +30,21 @@ class StorageService {
   Future<void> delete(String id) async {
     final items = await loadAll();
     items.removeWhere((p) => p.id == id);
+    await _writeAll(items);
+  }
+  // Saves edits (changed hours and weeks) back to an existing history item.
+  Future<void> updateProposal(String id, Proposal proposal) async {
+    final items = await loadAll();
+    final i = items.indexWhere((p) => p.id == id);
+    if (i < 0) return;
+    final old = items[i];
+    items[i] = SavedProposal(
+      id: old.id,
+      createdAt: old.createdAt,
+      brief: old.brief,
+      proposal: proposal,
+      detail: old.detail,
+    );
     await _writeAll(items);
   }
 

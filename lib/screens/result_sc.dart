@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -5,12 +6,17 @@ import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/proposel.dart';
 import '../services/pdf_ser.dart';
+import '../services/storage_ser.dart';
+import '../theme_controller.dart';
 import '../widget/motion.dart';
 
 class ResultScreen extends StatefulWidget {
   final Proposal proposal;
 
-  const ResultScreen({super.key, required this.proposal});
+  // The id of the saved history item. When set, edits are saved back to it.
+  final String? savedId;
+
+  const ResultScreen({super.key, required this.proposal, this.savedId});
 
   @override
   State<ResultScreen> createState() => _ResultScreenState();
@@ -18,19 +24,104 @@ class ResultScreen extends StatefulWidget {
 
 class _ResultScreenState extends State<ResultScreen> {
   final _rateController = TextEditingController();
+  late final TextEditingController _paceController;
   String _currency = r'$';
+
+  // Used to rescale the timeline when the hours change.
+  late List<Milestone> _ms;
+  late List<int> _baseWeeks;
+  late double _baseHours;
+  late double _basePace; // hours per week implied by the original plan
+  double? _paceOverride; // set when the user types their own pace
 
   Proposal get proposal => widget.proposal;
 
   double? get _rate => double.tryParse(_rateController.text.trim());
 
+  double get _pace => _paceOverride ?? _basePace;
+
   String get _text =>
       proposal.toPlainText(hourlyRate: _rate, currency: _currency);
 
   @override
+  void initState() {
+    super.initState();
+    _ms = proposal.sortedMilestones;
+    _baseWeeks = _ms.map((m) => m.week).toList();
+    _baseHours = proposal.totalHours;
+    final lastWeek = _ms.isEmpty ? 1 : max(1, _baseWeeks.last);
+    _basePace = _baseHours > 0 ? _baseHours / lastWeek : 20;
+    _paceController =
+        TextEditingController(text: _basePace.round().toString());
+  }
+
+  @override
   void dispose() {
     _rateController.dispose();
+    _paceController.dispose();
     super.dispose();
+  }
+
+  String _fmt(double h) =>
+      h == h.roundToDouble() ? h.toStringAsFixed(0) : h.toStringAsFixed(1);
+
+  // Recalculates milestone weeks from the current total hours and pace.
+  void _applyWeeks() {
+    if (_ms.isEmpty || _baseHours <= 0) return;
+    final scale = (proposal.totalHours / _baseHours) * (_basePace / _pace);
+    for (var k = 0; k < _ms.length; k++) {
+      _ms[k].week = max(1, (_baseWeeks[k] * scale).round());
+    }
+  }
+
+  // Saves the edited proposal back to History.
+  void _persist() {
+    final id = widget.savedId;
+    if (id == null) return;
+    StorageService().updateProposal(id, proposal).catchError((e) {
+      debugPrint('Could not save edits: $e');
+    });
+  }
+
+  void _setHours(TaskItem t, double value) {
+    setState(() {
+      t.hours = value.clamp(0.0, 1000.0).toDouble();
+      _applyWeeks();
+    });
+    _persist();
+  }
+
+  Future<void> _typeHours(TaskItem t) async {
+    final controller = TextEditingController(text: _fmt(t.hours));
+    final result = await showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(t.name, maxLines: 2, overflow: TextOverflow.ellipsis),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(
+            labelText: 'Hours',
+            suffixText: 'h',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(
+              ctx,
+              double.tryParse(controller.text.trim().replaceAll(',', '.')),
+            ),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (result != null) _setHours(t, result);
   }
 
   void _snack(String message) {
@@ -74,12 +165,12 @@ class _ResultScreenState extends State<ResultScreen> {
     }
   }
 
-  // A soft white card.
+  // A soft card that works in light and dark mode.
   Widget _card(Widget child) => Container(
     width: double.infinity,
     padding: const EdgeInsets.all(16),
     decoration: BoxDecoration(
-      color: Colors.white,
+      color: cardColor(context),
       borderRadius: BorderRadius.circular(20),
       boxShadow: const [
         BoxShadow(
@@ -127,11 +218,54 @@ class _ResultScreenState extends State<ResultScreen> {
     ),
   );
 
+  Widget _stepButton(IconData icon, VoidCallback onTap) {
+    final cs = Theme.of(context).colorScheme;
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(7),
+        child: Icon(icon, size: 16, color: cs.onPrimaryContainer),
+      ),
+    );
+  }
+
+  // The − [hours] + control on each task.
+  Widget _hoursEditor(TaskItem t) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        color: cs.primaryContainer,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _stepButton(Icons.remove, () => _setHours(t, t.hours - 1)),
+          InkWell(
+            onTap: () => _typeHours(t),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+              child: Text(
+                '${_fmt(t.hours)} h',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: cs.onPrimaryContainer,
+                ),
+              ),
+            ),
+          ),
+          _stepButton(Icons.add, () => _setHours(t, t.hours + 1)),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final milestones = proposal.sortedMilestones;
     var i = 0; // used to stagger the animations
 
     return Scaffold(
@@ -212,12 +346,12 @@ class _ResultScreenState extends State<ResultScreen> {
                               ),
                             _headerPill(
                               Icons.schedule,
-                              '${proposal.totalHours.toStringAsFixed(0)} hours',
+                              '${_fmt(proposal.totalHours)} hours',
                             ),
-                            if (milestones.isNotEmpty)
+                            if (_ms.isNotEmpty)
                               _headerPill(
                                 Icons.calendar_today_outlined,
-                                '${milestones.last.week} weeks',
+                                '${_ms.last.week} weeks',
                               ),
                           ],
                         ),
@@ -228,6 +362,15 @@ class _ResultScreenState extends State<ResultScreen> {
 
                 // Tasks
                 _heading('Tasks'),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: Text(
+                    'Tap − / + or the number to edit hours. '
+                        'The total, price and timeline update automatically.',
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: cs.onSurfaceVariant),
+                  ),
+                ),
                 ...proposal.tasks.map(
                       (t) => FadeSlide(
                     index: i++,
@@ -259,25 +402,8 @@ class _ResultScreenState extends State<ResultScreen> {
                                 ],
                               ),
                             ),
-                            const SizedBox(width: 12),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 5,
-                              ),
-                              decoration: BoxDecoration(
-                                color: cs.primaryContainer,
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Text(
-                                '${t.hours.toStringAsFixed(0)} h',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                  color: cs.onPrimaryContainer,
-                                ),
-                              ),
-                            ),
+                            const SizedBox(width: 10),
+                            _hoursEditor(t),
                           ],
                         ),
                       ),
@@ -301,7 +427,7 @@ class _ResultScreenState extends State<ResultScreen> {
                                   ?.copyWith(fontWeight: FontWeight.w700),
                             ),
                             Text(
-                              '${proposal.totalHours.toStringAsFixed(0)} hours',
+                              '${_fmt(proposal.totalHours)} hours',
                               style: theme.textTheme.titleMedium?.copyWith(
                                 fontWeight: FontWeight.w800,
                                 color: cs.primary,
@@ -356,17 +482,40 @@ class _ResultScreenState extends State<ResultScreen> {
                 ),
 
                 // Timeline
-                if (milestones.isNotEmpty) ...[
+                if (_ms.isNotEmpty) ...[
                   _heading('Timeline'),
                   FadeSlide(
                     index: i++,
                     child: _card(
                       Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          for (var k = 0; k < milestones.length; k++)
+                          TextField(
+                            controller: _paceController,
+                            keyboardType: TextInputType.number,
+                            decoration: InputDecoration(
+                              labelText: 'Hours you work per week',
+                              helperText:
+                              'Weeks follow your hours and this pace.',
+                              isDense: true,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                            onChanged: (v) {
+                              final p = double.tryParse(v.trim());
+                              setState(() {
+                                _paceOverride = (p != null && p > 0) ? p : null;
+                                _applyWeeks();
+                              });
+                              _persist();
+                            },
+                          ),
+                          const SizedBox(height: 16),
+                          for (var k = 0; k < _ms.length; k++)
                             Padding(
                               padding: EdgeInsets.only(
-                                bottom: k == milestones.length - 1 ? 0 : 14,
+                                bottom: k == _ms.length - 1 ? 0 : 14,
                               ),
                               child: Row(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -389,12 +538,12 @@ class _ResultScreenState extends State<ResultScreen> {
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Text(
-                                          milestones[k].name,
+                                          _ms[k].name,
                                           style: theme.textTheme.bodyMedium
                                               ?.copyWith(fontWeight: FontWeight.w600),
                                         ),
                                         Text(
-                                          'Week ${milestones[k].week}',
+                                          'Week ${_ms[k].week}',
                                           style: theme.textTheme.bodySmall
                                               ?.copyWith(color: cs.onSurfaceVariant),
                                         ),

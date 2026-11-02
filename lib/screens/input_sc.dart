@@ -7,6 +7,7 @@ import '../services/llm_service.dart';
 import '../services/storage_ser.dart';
 import '../widget/motion.dart';
 import 'result_sc.dart';
+import '../theme_controller.dart';
 
 class InputScreen extends StatefulWidget {
   const InputScreen({super.key});
@@ -58,14 +59,17 @@ class _InputScreenState extends State<InputScreen> {
       final proposal =
       await _service.generateProposal(brief, _detail, _language, _workType);
 
+      String? savedId;
       try {
+        final id = DateTime.now().microsecondsSinceEpoch.toString();
         await StorageService().save(SavedProposal(
-          id: DateTime.now().microsecondsSinceEpoch.toString(),
+          id: id,
           createdAt: DateTime.now(),
           brief: brief,
           proposal: proposal,
           detail: _detail,
         ));
+        savedId = id;
       } catch (e) {
         debugPrint('Could not save to history: $e');
       }
@@ -73,7 +77,9 @@ class _InputScreenState extends State<InputScreen> {
       if (!mounted) return;
       Navigator.push(
         context,
-        MaterialPageRoute(builder: (_) => ResultScreen(proposal: proposal)),
+        MaterialPageRoute(
+          builder: (_) => ResultScreen(proposal: proposal, savedId: savedId),
+        ),
       );
     } on NotABriefException catch (e) {
       _showError(e.message.isEmpty
@@ -168,6 +174,7 @@ class _InputScreenState extends State<InputScreen> {
         ),
         backgroundColor: theme.scaffoldBackgroundColor,
         surfaceTintColor: Colors.transparent,
+        actions: const [ThemeMenuButton(), SizedBox(width: 4)],
       ),
       body: SafeArea(
         child: Center(
@@ -196,7 +203,7 @@ class _InputScreenState extends State<InputScreen> {
                   index: 1,
                   child: Container(
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: cardColor(context),
                       borderRadius: BorderRadius.circular(22),
                       boxShadow: const [
                         BoxShadow(

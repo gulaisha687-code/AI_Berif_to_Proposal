@@ -3,6 +3,7 @@ import '../models/save_pro.dart';
 import '../services/storage_ser.dart';
 import '../widget/motion.dart';
 import 'result_sc.dart';
+import '../theme_controller.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -67,6 +68,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         ),
         backgroundColor: theme.scaffoldBackgroundColor,
         surfaceTintColor: Colors.transparent,
+        actions: const [ThemeMenuButton(), SizedBox(width: 4)],
       ),
       body: items == null
           ? const Center(child: CircularProgressIndicator())
@@ -107,18 +109,19 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       ),
                     ],
                   ),
-                  child: Material(
-                    color: Colors.white,
+                  child: Material(color: cardColor(context),
                     borderRadius: BorderRadius.circular(20),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(20),
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) =>
-                              ResultScreen(proposal: p.proposal),
+                          builder: (_) => ResultScreen(
+                            proposal: p.proposal,
+                            savedId: p.id,
+                          ),
                         ),
-                      ),
+                      ).then((_) => _load()),
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(16, 14, 6, 14),
                         child: Row(
