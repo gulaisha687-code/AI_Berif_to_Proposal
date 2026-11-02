@@ -45,6 +45,7 @@ class Proposal {
   final List<Milestone> milestones;
   final List<String> assumptions;
   final List<String> questionsForClient;
+  final String workType;
 
   Proposal({
     required this.isProjectBrief,
@@ -55,6 +56,7 @@ class Proposal {
     required this.milestones,
     required this.assumptions,
     required this.questionsForClient,
+    this.workType = '',
   });
 
   // Calculated in code, not trusted from the AI.
@@ -68,6 +70,8 @@ class Proposal {
     'milestones': milestones.map((m) => m.toJson()).toList(),
     'assumptions': assumptions,
     'questions_for_client': questionsForClient,
+    'work_type': workType,
+
   };
   factory Proposal.fromJson(Map<String, dynamic> j) => Proposal(
     isProjectBrief: (j['is_project_brief'] ?? true) as bool,
@@ -85,6 +89,7 @@ class Proposal {
     questionsForClient: (j['questions_for_client'] as List? ?? [])
         .map((e) => e.toString())
         .toList(),
+    workType: (j['work_type'] ?? '') as String,
   );
   List<Milestone> get sortedMilestones =>
       [...milestones]..sort((a, b) => a.week.compareTo(b.week));
