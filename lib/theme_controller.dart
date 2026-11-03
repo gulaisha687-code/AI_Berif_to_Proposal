@@ -7,7 +7,7 @@ final ValueNotifier<ThemeMode> themeMode = ValueNotifier(ThemeMode.system);
 // Card colour that works in both light and dark mode.
 Color cardColor(BuildContext context) =>
     Theme.of(context).brightness == Brightness.dark
-        ? const Color(0xFF1F1F2B)
+        ? const Color(0xFF241616)
         : Colors.white;
 
 Future<void> loadThemeMode() async {

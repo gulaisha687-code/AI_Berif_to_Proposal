@@ -5,9 +5,11 @@ import 'package:http/http.dart' as http;
 import '../models/save_pro.dart';
 import '../services/llm_service.dart';
 import '../services/storage_ser.dart';
-import '../widget/motion.dart';
-import 'result_sc.dart';
 import '../theme_controller.dart';
+import '../widget/account_button.dart';
+import '../widget/motion.dart';
+import '../widget/toast.dart';
+import 'result_sc.dart';
 
 class InputScreen extends StatefulWidget {
   const InputScreen({super.key});
@@ -41,6 +43,19 @@ class _InputScreenState extends State<InputScreen> {
     'design': 'UI/UX design',
     'testing': 'Testing / QA',
     'fix': 'Bug fix',
+  };
+
+  static const _examples = {
+    'Mobile login QA':
+    'Need comprehensive testing of login functionality including positive '
+        'and negative scenarios, session management and password reset flows '
+        'for a mobile app.',
+    'Salon booking app':
+    'I want an app for my salon where customers can book appointments, get '
+        'reminders on WhatsApp, and staff can see their daily schedule. '
+        'Budget is small and I need it in one month.',
+    'Photo upload crash':
+    'Our app crashes when users upload a profile photo. Please fix it.',
   };
 
   Future<void> _generate() async {
@@ -107,12 +122,11 @@ class _InputScreenState extends State<InputScreen> {
   void _showError(String message) {
     debugPrint('UI ERROR: $message');
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        duration: const Duration(seconds: 8),
-        behavior: SnackBarBehavior.floating,
-      ),
+    AppToast.show(
+      context,
+      message,
+      type: ToastType.error,
+      duration: const Duration(seconds: 5),
     );
   }
 
@@ -134,20 +148,22 @@ class _InputScreenState extends State<InputScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          title,
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+          title.toUpperCase(),
+          style: TextStyle(
+            fontSize: 10.5,
+            letterSpacing: 0.8,
+            fontWeight: FontWeight.w700,
             color: cs.onSurfaceVariant,
-            fontWeight: FontWeight.w600,
           ),
         ),
         const SizedBox(height: 6),
         Wrap(
           spacing: 8,
-          runSpacing: 4,
+          runSpacing: 2,
           children: options.entries
               .map(
                 (e) => ChoiceChip(
-              label: Text(e.value),
+              label: Text(e.value, style: const TextStyle(fontSize: 12)),
               selected: selected == e.key,
               showCheckmark: false,
               visualDensity: VisualDensity.compact,
@@ -174,37 +190,37 @@ class _InputScreenState extends State<InputScreen> {
         ),
         backgroundColor: theme.scaffoldBackgroundColor,
         surfaceTintColor: Colors.transparent,
-        actions: const [ThemeMenuButton(), SizedBox(width: 4)],
+        actions: const [AccountButton(), ThemeMenuButton(), SizedBox(width: 4)],
       ),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 720),
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 28),
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
               children: [
                 FadeSlide(
                   child: Text(
-                    'Paste the client brief',
-                    style: theme.textTheme.titleLarge
+                    'Turn a client brief into a proposal',
+                    style: theme.textTheme.titleMedium
                         ?.copyWith(fontWeight: FontWeight.w700),
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 2),
                 Text(
                   'A WhatsApp message, email or notes. Messy is fine.',
-                  style: theme.textTheme.bodyMedium
+                  style: theme.textTheme.bodySmall
                       ?.copyWith(color: cs.onSurfaceVariant),
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 12),
 
-                // The main thing: a big, soft text box.
+                // The main thing: a soft text box.
                 FadeSlide(
                   index: 1,
                   child: Container(
                     decoration: BoxDecoration(
                       color: cardColor(context),
-                      borderRadius: BorderRadius.circular(22),
+                      borderRadius: BorderRadius.circular(20),
                       boxShadow: const [
                         BoxShadow(
                           color: Color(0x14000000),
@@ -215,48 +231,91 @@ class _InputScreenState extends State<InputScreen> {
                     ),
                     child: TextField(
                       controller: _controller,
-                      minLines: 8,
-                      maxLines: 14,
+                      minLines: 6,
+                      maxLines: 10,
+                      maxLength: 8000,
                       enabled: !_loading,
                       decoration: const InputDecoration(
                         border: InputBorder.none,
-                        contentPadding: EdgeInsets.all(18),
+                        contentPadding: EdgeInsets.fromLTRB(16, 16, 16, 8),
                         hintText: 'e.g. I need an app for my salon with booking...',
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 10),
 
-                // The options: small chips.
+                // Quick examples
                 FadeSlide(
                   index: 2,
-                  child: _group('Detail', _details, _detail,
-                          (v) => setState(() => _detail = v)),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 0,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      Text(
+                        'Try:',
+                        style: theme.textTheme.labelMedium
+                            ?.copyWith(color: cs.onSurfaceVariant),
+                      ),
+                      ..._examples.entries.map(
+                            (e) => ActionChip(
+                          avatar: const Icon(Icons.bolt, size: 14),
+                          label: Text(e.key, style: const TextStyle(fontSize: 12)),
+                          visualDensity: VisualDensity.compact,
+                          shape: const StadiumBorder(),
+                          onPressed: _loading
+                              ? null
+                              : () => setState(() => _controller.text = e.value),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 14),
+
+                // Options card
                 FadeSlide(
                   index: 3,
-                  child: _group('Proposal language', _languages, _language,
-                          (v) => setState(() => _language = v)),
+                  child: Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: cardColor(context),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Color(0x0F000000),
+                          blurRadius: 12,
+                          offset: Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _group('Detail level', _details, _detail,
+                                (v) => setState(() => _detail = v)),
+                        const SizedBox(height: 12),
+                        _group('Proposal language', _languages, _language,
+                                (v) => setState(() => _language = v)),
+                        const SizedBox(height: 12),
+                        _group('Type of work', _workTypes, _workType,
+                                (v) => setState(() => _workType = v)),
+                      ],
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 14),
-                FadeSlide(
-                  index: 4,
-                  child: _group('Type of work', _workTypes, _workType,
-                          (v) => setState(() => _workType = v)),
-                ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 18),
 
                 // The main button.
                 Bouncy(
                   child: FilledButton(
                     onPressed: _loading ? null : _generate,
                     style: FilledButton.styleFrom(
-                      minimumSize: const Size.fromHeight(56),
+                      minimumSize: const Size.fromHeight(54),
                       shape: const StadiumBorder(),
                       textStyle: const TextStyle(
-                        fontSize: 16,
+                        fontSize: 15.5,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
